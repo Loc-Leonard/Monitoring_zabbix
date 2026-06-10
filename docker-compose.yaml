@@ -80,7 +80,7 @@ services:
     networks: [monitoring_net]
 
   rsyslog-server:
-    image: rsyslog/rsyslog_dev_base:latest
+    image: ubuntu:24.04
     container_name: rsyslog-server
     restart: unless-stopped
     command: ["rsyslogd", "-n", "-f", "/etc/rsyslog.conf"]
