@@ -1,0 +1,18 @@
+name: Verify monitoring lab
+
+on: [push, workflow_dispatch]
+
+jobs:
+  lint-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shell scripts have LF-compatible syntax
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          find . -name "*.sh" -print0 | xargs -0 -r shellcheck
+
+      - name: Compose config validation
+        run: docker compose config >/dev/null

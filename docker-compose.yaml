@@ -1,0 +1,199 @@
+services:
+  db:
+    image: postgres:15
+    container_name: zabbix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [monitoring_net]
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-latest
+    container_name: zabbix-server
+    restart: unless-stopped
+    environment:
+      DB_SERVER_HOST: db
+      POSTGRES_USER: ${ZBX_DB_USER}
+      POSTGRES_PASSWORD: ${ZBX_DB_PASSWORD}
+      POSTGRES_DB: ${ZBX_DB_DATABASE}
+      ZBX_ENABLE_SNMP_TRAPS: 'true'
+      ZBX_STARTPOLLERS: '10'
+      ZBX_STARTPINGERS: '5'
+      ZBX_TIMEOUT: '10'
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "10051:10051"
+    volumes:
+      - ./zabbix/scripts:/usr/lib/zabbix/externalscripts
+    networks: [monitoring_net]
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-latest
+    container_name: zabbix-web
+    restart: unless-stopped
+    environment:
+      DB_SERVER_HOST: db
+      POSTGRES_USER: ${ZBX_DB_USER}
+      POSTGRES_PASSWORD: ${ZBX_DB_PASSWORD}
+      POSTGRES_DB: ${ZBX_DB_DATABASE}
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: ${ZABBIX_TIMEZONE}
+    depends_on:
+      - zabbix-server
+    ports:
+      - "8080:8080"
+    networks: [monitoring_net]
+
+  zabbix-proxy:
+    image: zabbix/zabbix-proxy-sqlite3:alpine-latest
+    container_name: zabbix-proxy
+    restart: unless-stopped
+    environment:
+      ZBX_HOSTNAME: zabbix-proxy
+      ZBX_SERVER_HOST: zabbix-server
+    depends_on:
+      - zabbix-server
+    ports:
+      - "10061:10051"
+    networks: [monitoring_net]
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks: [monitoring_net]
+
+  rsyslog-server:
+    image: rsyslog/rsyslog_dev_base:latest
+    container_name: rsyslog-server
+    restart: unless-stopped
+    command: ["rsyslogd", "-n", "-f", "/etc/rsyslog.conf"]
+    ports:
+      - "514:514/udp"
+      - "6514:6514/tcp"
+    volumes:
+      - ./rsyslog/rsyslog.conf:/etc/rsyslog.conf:ro
+      - ./rsyslog/certs:/etc/rsyslog/certs:ro
+      - rsyslog_data:/var/log/remote
+    networks: [monitoring_net]
+
+  splunk:
+    image: splunk/splunk:latest
+    container_name: splunk
+    restart: unless-stopped
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_PASSWORD: ChangeMe123!
+    ports:
+      - "8000:8000"
+      - "8088:8088"
+      - "9997:9997"
+    volumes:
+      - splunk_etc:/opt/splunk/etc
+      - splunk_var:/opt/splunk/var
+    networks: [monitoring_net]
+
+  apache-app:
+    image: httpd:2.4
+    container_name: apache-app
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    networks: [monitoring_net]
+
+  host1:
+    build: ./host
+    container_name: host1
+    hostname: host1
+    environment:
+      HOSTNAME_VALUE: host1
+      ZBX_SERVER_HOST: zabbix-server
+      RSYSLOG_SERVER: rsyslog-server
+      SNMPV3_USER: ${SNMPV3_USER}
+      SNMPV3_AUTH: ${SNMPV3_AUTH}
+      SNMPV3_PRIV: ${SNMPV3_PRIV}
+    privileged: true
+    networks: [monitoring_net]
+
+  host2:
+    build: ./host
+    container_name: host2
+    hostname: host2
+    environment:
+      HOSTNAME_VALUE: host2
+      ZBX_SERVER_HOST: zabbix-server
+      RSYSLOG_SERVER: rsyslog-server
+      SNMPV3_USER: ${SNMPV3_USER}
+      SNMPV3_AUTH: ${SNMPV3_AUTH}
+      SNMPV3_PRIV: ${SNMPV3_PRIV}
+    privileged: true
+    networks: [monitoring_net]
+
+  host3:
+    build: ./host
+    container_name: host3
+    hostname: host3
+    environment:
+      HOSTNAME_VALUE: host3
+      ZBX_SERVER_HOST: zabbix-server
+      RSYSLOG_SERVER: rsyslog-server
+      SNMPV3_USER: ${SNMPV3_USER}
+      SNMPV3_AUTH: ${SNMPV3_AUTH}
+      SNMPV3_PRIV: ${SNMPV3_PRIV}
+    privileged: true
+    networks: [monitoring_net]
+
+  host4:
+    build: ./host
+    container_name: host4
+    hostname: host4
+    environment:
+      HOSTNAME_VALUE: host4
+      ZBX_SERVER_HOST: zabbix-proxy
+      RSYSLOG_SERVER: rsyslog-server
+      SNMPV3_USER: ${SNMPV3_USER}
+      SNMPV3_AUTH: ${SNMPV3_AUTH}
+      SNMPV3_PRIV: ${SNMPV3_PRIV}
+    privileged: true
+    networks: [monitoring_net]
+
+  host5:
+    build: ./host
+    container_name: host5
+    hostname: host5
+    environment:
+      HOSTNAME_VALUE: host5
+      ZBX_SERVER_HOST: zabbix-proxy
+      RSYSLOG_SERVER: rsyslog-server
+      SNMPV3_USER: ${SNMPV3_USER}
+      SNMPV3_AUTH: ${SNMPV3_AUTH}
+      SNMPV3_PRIV: ${SNMPV3_PRIV}
+    privileged: true
+    networks: [monitoring_net]
+
+volumes:
+  db_data:
+  grafana_data:
+  rsyslog_data:
+  splunk_etc:
+  splunk_var:
+
+networks:
+  monitoring_net:
+    driver: bridge

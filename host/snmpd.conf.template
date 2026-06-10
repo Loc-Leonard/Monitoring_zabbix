@@ -1,0 +1,3 @@
+agentaddress udp:161
+sysLocation DockerLab
+sysContact admin@example.local
